@@ -16,6 +16,8 @@ from torch_int.nn.linear import W8A8BFP32OFP32Linear, W8A8B8O8Linear, W8A8B8O8Li
 from torch_int.nn.fused import LayerNormQ
 from transformers.utils import logging
 from torch_int.nn.bmm import BMM_S8T_S8N_S8T, BMM_S8T_S8N_F32T
+import numpy as np
+import os
 
 logger = logging.get_logger(__name__)
 
@@ -136,9 +138,32 @@ class Int8OPTAttention(nn.Module):
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
+        
+        
+        # if query_states.size(1) == 16:
+        
+        #     os.makedirs("/root/mwnoh/smoothquant/examples/my_debug_outputs", exist_ok=True)
+            
+        #     torch.save(query_states, "/root/mwnoh/smoothquant/examples/my_debug_outputs/query_states.pt")
+        #     torch.save(key_states, "/root/mwnoh/smoothquant/examples/my_debug_outputs/key_states.pt")
+
+        # print("query_states size: ", query_states.size())
+        # print("key_states size: ", key_states.size())
+        # print("value_states size: ", value_states.size())
 
         src_len = key_states.size(1)
-        attn_weights = self.qk_bmm(query_states, key_states)
+        # ----------
+        attn_weights = self.qk_bmm(query_states, key_states) # result float
+        # if query_states.size(1) == 16:
+        #     alpha_1 = self.qk_bmm.a * 100000
+        #     print(alpha_1)
+        #     torch.save(attn_weights, "/root/mwnoh/smoothquant/examples/my_debug_outputs/attn_weights.pt")
+            
+            
+            
+        
+        # print("attn_weights size: ", attn_weights.size())
+        # print("attention_mask size", attention_mask.size())
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
@@ -190,7 +215,7 @@ class Int8OPTAttention(nn.Module):
         attn_probs = attn_probs.to(torch.int8)
 
         value_states = value_states.transpose(1, 2).contiguous()
-        attn_output = self.pv_bmm(attn_probs, value_states)
+        attn_output = self.pv_bmm(attn_probs, value_states) # result int
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
@@ -285,7 +310,7 @@ class Int8OPTDecoderLayer(nn.Module):
 
         # Self Attention
         residual = hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = self.self_attn_layer_norm(hidden_states) # result integer
 
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -293,19 +318,25 @@ class Int8OPTDecoderLayer(nn.Module):
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
-        )
+        ) # result float
 
-        residual.add_(hidden_states.to(residual.dtype))
+        print("hidden_states size: ", hidden_states.size())
 
-        hidden_states = self.final_layer_norm(residual)
+        residual.add_(hidden_states.to(residual.dtype)) # result float
 
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.final_layer_norm(residual) # result integer
 
-        hidden_states = self.fc2(hidden_states)
+        if hidden_states.size(1) == 16:
+            torch.save(hidden_states, "/root/mwnoh/smoothquant/examples/my_debug_outputs/f1_input.pt")
+        hidden_states = self.fc1(hidden_states) # result integer
+        if hidden_states.size(1) == 16:
+            torch.save(hidden_states, "/root/mwnoh/smoothquant/examples/my_debug_outputs/f1_output.pt")
 
-        residual.add_(hidden_states.to(residual.dtype))
+        hidden_states = self.fc2(hidden_states) # result float
 
-        outputs = (residual,)
+        residual.add_(hidden_states.to(residual.dtype)) # result float
+
+        outputs = (residual,) # result float
 
         if output_attentions:
             outputs += (self_attn_weights,)
@@ -369,10 +400,11 @@ class Int8OPTDecoder(OPTPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     get_input_embeddings = OPTDecoder.get_input_embeddings
     set_input_embeddings = OPTDecoder.set_input_embeddings
-    _prepare_decoder_attention_mask = OPTDecoder._prepare_decoder_attention_mask
+    # _prepare_decoder_attention_mask = OPTDecoder._prepare_decoder_attention_mask
     old_forward = OPTDecoder.forward
 
     @staticmethod

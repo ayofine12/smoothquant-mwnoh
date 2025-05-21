@@ -12,7 +12,7 @@ from smoothquant.calibration import get_act_scales
 
 def build_model_and_tokenizer(model_name):
     tokenizer = AutoTokenizer.from_pretrained(model_name, model_max_length=512)
-    kwargs = {"torch_dtype": torch.float16, "device_map": "sequential"}
+    kwargs = {"torch_dtype": torch.float16, "device_map": "cuda:3"}
     model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
     return model, tokenizer
 
@@ -20,18 +20,18 @@ def build_model_and_tokenizer(model_name):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--model-name", type=str, default="facebook/opt-1.3b", help="model name"
+        "--model-name", type=str, default="/mnt/models/opt/opt-125m", help="model name"
     )
     parser.add_argument(
         "--output-path",
         type=str,
-        default="act_scales/opt-1.3b.pt",
+        default="../act_scales/opt-125m.pt",
         help="where to save the act scales",
     )
     parser.add_argument(
         "--dataset-path",
         type=str,
-        default="dataset/val.jsonl.zst",
+        default="../dataset/val.jsonl.zst",
         help="location of the calibration dataset, we use the validation set of the Pile dataset",
     )
     parser.add_argument("--num-samples", type=int, default=512)

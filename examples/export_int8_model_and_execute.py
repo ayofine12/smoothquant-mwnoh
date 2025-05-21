@@ -1,24 +1,36 @@
 import torch
 import argparse
 import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 import sys
 sys.path.append('/root/mwnoh/smoothquant/smoothquant')
 
 from pathlib import Path
-
 from transformers.models.opt.modeling_opt import OPTForCausalLM
 from transformers import AutoTokenizer
-
-# from smoothquant.opt import Int8OPTForCausalLM
-# from smoothquant.smooth import smooth_lm
-
-# from smoothquant.calibration import get_static_decoder_layer_scales
-
+from transformers import GPT2Tokenizer
 from opt import Int8OPTForCausalLM
 from smooth import smooth_lm
-
 from calibration import get_static_decoder_layer_scales
+from torch.nn.functional import pad
+from datasets import load_dataset
 
+DEVICE = torch.device("cuda")  
+
+def generate(model, input_ids, past_key_values=None):
+    model.eval()
+    if past_key_values is None:
+        pad_len = 512 - input_ids.shape[1]
+        input_ids = pad(input_ids, (0, pad_len), value=1)
+        torch.cuda.synchronize()
+        outputs = model(input_ids)
+        torch.cuda.synchronize()
+    else:
+        torch.cuda.synchronize()
+        outputs = model(input_ids=input_ids, past_key_values=past_key_values)
+        torch.cuda.synchronize()
+    
+    return outputs
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -26,9 +38,9 @@ if __name__ == '__main__':
     parser.add_argument("--num-samples", type=int, default=512)
     parser.add_argument("--seq-len", type=int, default=512)
     parser.add_argument("--act-scales", type=str,
-                        default='../act_scales/opt-125m.pt')
+                        default='/root/mwnoh/smoothquant/act_scales/opt-125m.pt')
     parser.add_argument("--output-path", type=str, default='int8_models')
-    parser.add_argument('--dataset-path', type=str, default='../dataset/val.jsonl.zst',
+    parser.add_argument('--dataset-path', type=str, default='/root/mwnoh/smoothquant/dataset/val.jsonl.zst',
                         help='location of the calibration dataset, we use the validation set of the Pile dataset')
     parser.add_argument('--export-FT', default=False, action="store_true")
     args = parser.parse_args()
@@ -59,13 +71,23 @@ if __name__ == '__main__':
         print(f"Saved scaling factors at {output_path}")
     else:
         int8_model = Int8OPTForCausalLM.from_float(model, decoder_layer_scales)
-        int8_model.save_pretrained(output_path)
+        tokenizer = AutoTokenizer.from_pretrained('facebook/opt-125m')
+        input = "Earth rotates around the sun, and moon rotates around the "
+        input_ids_list = tokenizer(input).input_ids
+        input_ids = torch.tensor(input_ids_list).unsqueeze(0).cuda(DEVICE)
+        print("input_ids size: ", input_ids.size())
 
-        output_dir = "opt-125m-np"
-        os.makedirs(output_dir, exist_ok=True)
-        state_dict = int8_model.state_dict()
-        for name, tensor in state_dict.items():
-            name += '.pt'
-            filename = os.path.join(output_dir, name)
-            torch.save(tensor, filename)
-            print(f"Saved {name} -> {filename}")
+        outputs = generate(int8_model, input_ids)
+        print("outputs size: ", outputs.logits.size())
+        past_key_values = outputs.past_key_values
+        print("past_key_values size: ", past_key_values[0][0].size())
+        
+        
+        next_token_logits = outputs.logits[:, -1, :]
+        predicted_token_id = torch.argmax(next_token_logits, dim=-1)  # [batch_size]
+        predicted_token_id = predicted_token_id.unsqueeze(-1)
+        
+        outputs = generate(int8_model, predicted_token_id, past_key_values)
+        print("outputs size: ", outputs.logits.size())
+        past_key_values = outputs.past_key_values
+        print("past_key_values size: ", past_key_values[0][0].size())
