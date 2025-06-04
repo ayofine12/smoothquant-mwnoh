@@ -110,6 +110,9 @@ class Int8OPTAttention(nn.Module):
 
         bsz, tgt_len, _ = hidden_states.size()
 
+        if hidden_states.size(1) == 16:
+            torch.save(hidden_states[:,0,:].cpu(), "/root/mwnoh/smoothquant/examples/my_debug_outputs/hidden_states.pt")
+
         # get query proj
         query_states = self.q_proj(hidden_states)
         # get key, value proj

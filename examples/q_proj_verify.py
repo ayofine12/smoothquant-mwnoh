@@ -5,10 +5,10 @@ hidden_states = torch.load("/root/mwnoh/smoothquant/examples/my_debug_outputs/hi
 query_states = torch.load("/root/mwnoh/smoothquant/examples/my_debug_outputs/query_states.pt")
 print("query_states: \n", query_states)
 
-q_proj_weight = torch.load("/root/mwnoh/smoothquant/examples/opt-125m-np/model.decoder.layers.0.self_attn.q_proj.weight.pt")
-q_proj_bias = torch.load("/root/mwnoh/smoothquant/examples/opt-125m-np/model.decoder.layers.0.self_attn.q_proj.bias.pt")
-q_proj_a = torch.load("/root/mwnoh/smoothquant/examples/opt-125m-np/model.decoder.layers.0.self_attn.q_proj.a.pt")
-q_proj_b = torch.load("/root/mwnoh/smoothquant/examples/opt-125m-np/model.decoder.layers.0.self_attn.q_proj.b.pt")
+q_proj_weight = torch.load("/root/mwnoh/smoothquant/examples/opt-125m-weights-pt/model.decoder.layers.0.self_attn.q_proj.weight.pt")
+q_proj_bias = torch.load("/root/mwnoh/smoothquant/examples/opt-125m-weights-pt/model.decoder.layers.0.self_attn.q_proj.bias.pt")
+q_proj_a = torch.load("/root/mwnoh/smoothquant/examples/opt-125m-weights-pt/model.decoder.layers.0.self_attn.q_proj.a.pt")
+q_proj_b = torch.load("/root/mwnoh/smoothquant/examples/opt-125m-weights-pt/model.decoder.layers.0.self_attn.q_proj.b.pt")
 
 hidden_states_float32 = hidden_states.to(torch.float32)
 hiddens_states_shape = hidden_states_float32.shape
