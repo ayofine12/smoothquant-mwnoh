@@ -1,7 +1,6 @@
 import torch
 import argparse
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 import sys
 sys.path.append('/root/mwnoh/smoothquant/smoothquant')
 

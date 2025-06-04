@@ -144,26 +144,15 @@ class Int8OPTAttention(nn.Module):
         
         #     os.makedirs("/root/mwnoh/smoothquant/examples/my_debug_outputs", exist_ok=True)
             
-        #     torch.save(query_states, "/root/mwnoh/smoothquant/examples/my_debug_outputs/query_states.pt")
-        #     torch.save(key_states, "/root/mwnoh/smoothquant/examples/my_debug_outputs/key_states.pt")
-
-        # print("query_states size: ", query_states.size())
-        # print("key_states size: ", key_states.size())
-        # print("value_states size: ", value_states.size())
+        #     torch.save(query_states[:,0,:].cpu(), "/root/mwnoh/smoothquant/examples/my_debug_outputs/query_states.pt")
+        #     torch.save(key_states[:,:512,:].cpu(), "/root/mwnoh/smoothquant/examples/my_debug_outputs/key_states.pt")
 
         src_len = key_states.size(1)
         # ----------
         attn_weights = self.qk_bmm(query_states, key_states) # result float
         # if query_states.size(1) == 16:
-        #     alpha_1 = self.qk_bmm.a * 100000
-        #     print(alpha_1)
+        #     torch.save(self.qk_bmm.a, "/root/mwnoh/smoothquant/examples/my_debug_outputs/alpha.pt")
         #     torch.save(attn_weights, "/root/mwnoh/smoothquant/examples/my_debug_outputs/attn_weights.pt")
-            
-            
-            
-        
-        # print("attn_weights size: ", attn_weights.size())
-        # print("attention_mask size", attention_mask.size())
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
@@ -215,7 +204,22 @@ class Int8OPTAttention(nn.Module):
         attn_probs = attn_probs.to(torch.int8)
 
         value_states = value_states.transpose(1, 2).contiguous()
+
+
+        if query_states.size(1) == 16:
+            print("attn_probs shape: ", attn_probs.shape)
+            print("value_states shape: ", value_states.shape)
+            os.makedirs("/root/mwnoh/smoothquant/examples/my_debug_outputs", exist_ok=True)
+            torch.save(attn_probs[:, 0, :513].squeeze(1), "/root/mwnoh/smoothquant/examples/my_debug_outputs/attn_probs.pt")
+            torch.save(value_states[:, :, :513], "/root/mwnoh/smoothquant/examples/my_debug_outputs/value_states.pt")
+
+
         attn_output = self.pv_bmm(attn_probs, value_states) # result int
+
+        # if query_states.size(1) == 16:
+        #     torch.save(self.pv_bmm.a, "/root/mwnoh/smoothquant/examples/my_debug_outputs/pv_bmm_alpha.pt")
+        #     torch.save(attn_output, "/root/mwnoh/smoothquant/examples/my_debug_outputs/attn_output.pt")
+
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
@@ -320,13 +324,14 @@ class Int8OPTDecoderLayer(nn.Module):
             output_attentions=output_attentions,
         ) # result float
 
-        print("hidden_states size: ", hidden_states.size())
+        # print("hidden_states size: ", hidden_states.size())
 
         residual.add_(hidden_states.to(residual.dtype)) # result float
 
         hidden_states = self.final_layer_norm(residual) # result integer
 
         if hidden_states.size(1) == 16:
+            os.makedirs("/root/mwnoh/smoothquant/examples/my_debug_outputs", exist_ok=True)
             torch.save(hidden_states, "/root/mwnoh/smoothquant/examples/my_debug_outputs/f1_input.pt")
         hidden_states = self.fc1(hidden_states) # result integer
         if hidden_states.size(1) == 16:

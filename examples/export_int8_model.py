@@ -9,15 +9,11 @@ from pathlib import Path
 from transformers.models.opt.modeling_opt import OPTForCausalLM
 from transformers import AutoTokenizer
 
-# from smoothquant.opt import Int8OPTForCausalLM
-# from smoothquant.smooth import smooth_lm
-
-# from smoothquant.calibration import get_static_decoder_layer_scales
-
 from opt import Int8OPTForCausalLM
 from smooth import smooth_lm
-
 from calibration import get_static_decoder_layer_scales
+
+import numpy as np
 
 
 if __name__ == '__main__':
@@ -58,14 +54,24 @@ if __name__ == '__main__':
         torch.save(raw_scales, output_path)
         print(f"Saved scaling factors at {output_path}")
     else:
-        int8_model = Int8OPTForCausalLM.from_float(model, decoder_layer_scales)
-        int8_model.save_pretrained(output_path)
+        # int8_model = Int8OPTForCausalLM.from_float(model, decoder_layer_scales)
+        # int8_model.save_pretrained(output_path)
 
-        output_dir = "opt-125m-np"
+        model_smoothquant = Int8OPTForCausalLM.from_pretrained(
+            '/mnt/models/smoothquant/opt-125m', torch_dtype=torch.float16, device_map='auto')
+
+        output_dir = "opt-125m-weights-pt"
         os.makedirs(output_dir, exist_ok=True)
-        state_dict = int8_model.state_dict()
-        for name, tensor in state_dict.items():
+        state_dict = model_smoothquant.state_dict()
+        for name, weight_tensor in state_dict.items():
             name += '.pt'
             filename = os.path.join(output_dir, name)
-            torch.save(tensor, filename)
+            if weight_tensor.dtype != torch.int8:
+                weight_tensor = weight_tensor.to(torch.float32).cpu()
+            elif weight_tensor.dtype == torch.int8:
+                weight_tensor = weight_tensor.to(torch.int32).cpu()
+            np.save(filename, weight_tensor)
             print(f"Saved {name} -> {filename}")
+            
+
+
